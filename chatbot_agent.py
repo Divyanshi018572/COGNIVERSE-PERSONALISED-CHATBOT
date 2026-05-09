@@ -17,7 +17,7 @@ class ChatState(TypedDict):
 
 # Initialize LLM (Meta LLaMA via OpenRouter)
 llm = ChatOpenAI(
-    model="meta-llama/llama-3.3-70b-instruct:free",
+    model="meta/llama-3.3-70b-instruct:free",
     openai_api_base="https://openrouter.ai/api/v1",
     openai_api_key=os.getenv("OPENROUTER_API_KEY"),
     temperature=0.7
