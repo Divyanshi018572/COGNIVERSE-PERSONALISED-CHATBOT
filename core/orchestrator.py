@@ -9,6 +9,8 @@ from agents.memory_agent import memory_extraction_node
 from agents.safety_agent import check_safety
 from agents.tool_node import coding_tool_node
 from agents.rag_agent import rag_agent_node
+from agents.evaluator_agent import evaluator_node
+from agents.github_agent import github_agent_node
 from core.router import route
 
 # ── 1. Graph State Setup ──────────────────────────────────────────────────────
@@ -30,7 +32,14 @@ def blocked_node(state: AgentState):
     return {"messages": [msg], "agent_trace": state.get("agent_trace", []) + ["blocked_node"]}
 
 def router_node(state: AgentState):
-    user_msg = state["messages"][-1].content
+    from langchain_core.messages import HumanMessage
+    human_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage) or getattr(m, "type", "") == "human"]
+    
+    if not human_msgs:
+        user_msg = state["messages"][-1].content
+    else:
+        user_msg = human_msgs[-1].content
+        
     if isinstance(user_msg, list):
         return {"task": "vision"}
     decision = route(user_msg, state.get("file_path"))
@@ -46,7 +55,9 @@ graph.add_node("coding_agent", coding_agent_node)
 graph.add_node("coding_tools", coding_tool_node)
 graph.add_node("research_agent", research_agent_node)
 graph.add_node("rag_agent", rag_agent_node)
+graph.add_node("evaluator", evaluator_node)
 graph.add_node("memory_agent", memory_extraction_node)
+graph.add_node("github_agent", github_agent_node)
 from agents.vision_agent import vision_agent_node
 graph.add_node("vision_agent", vision_agent_node)
 
@@ -68,9 +79,23 @@ def task_route(state: AgentState):
         return "vision_agent"
     elif task == "rag":
         return "rag_agent"
+    elif task == "github":
+        return "github_agent"
     return "chat_agent"
 
 # Edges
+def evaluation_condition(state: AgentState):
+    """Loop back if score is low, otherwise finalize."""
+    score = state.get("eval_score", 1.0)
+    retries = state.get("retry_count", 0)
+    
+    # Trigger self-correction if score is low and we haven't retried too much
+    # Using 0.8 as a "High Resolution" threshold
+    if score < 0.8 and retries < 2:
+        return "router" # Re-route to fix the issue
+        
+    return "memory_agent"
+
 graph.add_edge(START, "safety")
 graph.add_conditional_edges("safety", safety_route)
 graph.add_edge("blocked", END)
@@ -90,12 +115,16 @@ def tools_condition(state: AgentState):
 graph.add_conditional_edges("coding_agent", tools_condition)
 graph.add_edge("coding_tools", "coding_agent")
 
-# All agents route to memory_agent to extract facts, then to END
-graph.add_edge("chat_agent", "memory_agent")
-graph.add_edge("reasoning_agent", "memory_agent")
-graph.add_edge("research_agent", "memory_agent")
-graph.add_edge("rag_agent", "memory_agent")
-graph.add_edge("vision_agent", "memory_agent")
+# All agents route to evaluator to score
+graph.add_edge("chat_agent", "evaluator")
+graph.add_edge("reasoning_agent", "evaluator")
+graph.add_edge("research_agent", "evaluator")
+graph.add_edge("rag_agent", "evaluator")
+graph.add_edge("vision_agent", "evaluator")
+graph.add_edge("github_agent", "evaluator")
+
+# Evaluator decides whether to loop back or move to memory
+graph.add_conditional_edges("evaluator", evaluation_condition)
 graph.add_edge("memory_agent", END)
 
 from psycopg_pool import ConnectionPool

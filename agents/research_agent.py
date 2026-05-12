@@ -7,15 +7,20 @@ from agents.chat_agent import AgentState
 import os
 import json
 
+from core.router import TASK_MODEL_MAP
+
 def research_agent_node(state: AgentState):
-    llm = get_model_with_fallback("meta/llama-3.3-70b-instruct")
+    model_name = TASK_MODEL_MAP.get("research", "groq/llama-3.3-70b-versatile")
+    llm = get_model_with_fallback(model_name)
     messages = list(state["messages"])
     
     if not any(isinstance(m, SystemMessage) for m in messages):
+        from core.prompts import FORMATTING_DIRECTIVE
         sys_msg = SystemMessage(content=(
             "You are an expert research assistant. Use the ArXiv tool for academic/scientific papers, and Tavily for general web searches. "
             "If the user asks a follow-up question about previous papers (like asking for links), DO NOT search again if you already have the information. "
             "Always provide ArXiv links in the format https://arxiv.org/abs/<id>. "
+            f"{FORMATTING_DIRECTIVE}\n"
             "CRITICAL RULE: Always end your response with an engaging follow-up question "
             "(e.g., asking if they want a deeper summary, related research, or clarification on specific findings) to keep the user engaged."
         ))
@@ -31,6 +36,17 @@ def research_agent_node(state: AgentState):
     trace = state.get("agent_trace", []) + ["research_agent"]
     
     # First LLM call
+    # High-Resolution Self-Correction: Inject feedback if we are in a retry loop
+    feedback = state.get("eval_feedback")
+    if feedback and state.get("retry_count", 0) > 0:
+        from langchain_core.messages import HumanMessage
+        messages = list(messages)
+        messages.append(HumanMessage(content=(
+            f"⚠️ YOUR PREVIOUS RESPONSE FAILED QUALITY AUDIT.\n"
+            f"{feedback}\n"
+            "Please regenerate your response and fix ALL the issues mentioned above."
+        )))
+
     response = llm_with_tools.invoke(messages)
     
     if not response.tool_calls:

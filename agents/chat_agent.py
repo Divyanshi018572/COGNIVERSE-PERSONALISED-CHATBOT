@@ -16,6 +16,7 @@ class AgentState(TypedDict):
     hitl_response:  str           
     eval_score:     float         
     eval_feedback:  str           
+    retry_count:    int           
     rag_context:    str           
     agent_trace:    list[str]     
 
@@ -37,14 +38,27 @@ def chat_agent_node(state: AgentState, config: RunnableConfig):
             if facts:
                 memory_context = f"\n\nHere is what you know about the user:\n{facts}\n"
 
+        from core.prompts import FORMATTING_DIRECTIVE
         sys_msg = SystemMessage(content=(
             "You are a helpful conversational AI assistant. "
             f"{memory_context}"
+            f"{FORMATTING_DIRECTIVE}\n"
             "CRITICAL RULE: Always end your response with an engaging follow-up question related to the user's query "
             "to maintain continuity and keep the user engaged."
         ))
         messages = [sys_msg] + messages
         
+    # High-Resolution Self-Correction: Inject feedback if we are in a retry loop
+    feedback = state.get("eval_feedback")
+    if feedback and state.get("retry_count", 0) > 0:
+        from langchain_core.messages import HumanMessage
+        messages = list(messages) # Copy to avoid mutating original state incorrectly
+        messages.append(HumanMessage(content=(
+            f"⚠️ YOUR PREVIOUS RESPONSE FAILED QUALITY AUDIT.\n"
+            f"{feedback}\n"
+            "Please regenerate your response and fix ALL the issues mentioned above."
+        )))
+
     response = llm.invoke(messages)
     
     trace = state.get("agent_trace", []) + ["chat_agent"]

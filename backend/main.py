@@ -20,6 +20,33 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cognibot Multi-Agent API", lifespan=lifespan)
 
+# --- WebMCP Discovery ---
+@app.get("/mcp-actions.json")
+async def mcp_discovery():
+    """Publishes machine-readable actions for AI browsing agents."""
+    return {
+        "version": "1.0",
+        "site": "http://localhost:8501",
+        "actions": [
+            {
+                "id": "analyze-github-repo",
+                "name": "Analyze GitHub Repository",
+                "description": "Analyzes a GitHub repository's architecture, tech stack, and contribution guide.",
+                "method": "declarative",
+                "endpoint": "/chat",
+                "parameters": {
+                    "required": ["message"],
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "A message containing the GitHub URL to analyze, e.g., 'Analyze https://github.com/langchain-ai/langchain'"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+
 # Auth router removed
 
 from typing import Optional
@@ -70,10 +97,11 @@ def chat_stream(request: ChatRequest, user_id: int = 1):
     else:
         msg = HumanMessage(content=request.message)
 
-    # Force 'rag' task when a document filename is present
-    initial_state_override = {"task": "rag"} if request.file_name else {}
+    # Force 'rag' task and set file_path when a document filename is present
+    initial_state_override = {"task": "rag", "file_path": request.file_name} if request.file_name else {}
 
     def generate():
+        streamed_nodes = set()
         try:
             if request.action == "reject":
                 from langchain_core.messages import ToolMessage
@@ -87,7 +115,7 @@ def chat_stream(request: ChatRequest, user_id: int = 1):
             elif request.action == "approve":
                 stream_input = None
             else:
-                stream_input = {"messages": [msg], **initial_state_override}
+                stream_input = {"messages": [msg], "retry_count": 0, **initial_state_override}
                 
             for event in orchestrator.stream(
                 stream_input,
@@ -106,16 +134,46 @@ def chat_stream(request: ChatRequest, user_id: int = 1):
                             msgs = state_update.get("messages", [])
                             if msgs:
                                 data["reason"] = msgs[-1].content
+                        
+                        # Pass evaluation score for the current turn
+                        if node_name == "evaluator":
+                            data["score"] = state_update.get("eval_score", 0.0)
+                            data["critique"] = state_update.get("eval_feedback", "")
                                 
+                        # Fallback for models/wrappers that completely fail to use stream callbacks
+                        if node_name not in streamed_nodes and node_name not in ["safety", "router", "evaluator", "memory_agent", "coding_tools", "blocked"]:
+                            msgs = state_update.get("messages", [])
+                            if msgs:
+                                last_msg = msgs[-1]
+                                if getattr(last_msg, "type", "") == "ai" and last_msg.content:
+                                    yield f"data: {json.dumps({'type': 'token', 'content': last_msg.content})}\n\n"
+
                         yield f"data: {json.dumps(data)}\n\n"
 
                 elif mode == "messages":
                     chunk, metadata = payload
-                    # Do not stream internal safety checks or router tokens to the user
-                    if metadata and metadata.get("langgraph_node") in ["safety", "router"]:
+                    node_name = metadata.get("langgraph_node") if metadata else None
+                    
+                    # 1. Do not stream internal/background tasks to the user
+                    if node_name in ["safety", "router", "evaluator", "memory_agent"]:
                         continue
-                    if hasattr(chunk, "content") and chunk.content:
-                        yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
+                        
+                    # 2. Only stream partial chunks to avoid sending the full message again at the end,
+                    # EXCEPT if the model didn't stream any chunks (non-streaming fallback).
+                    is_chunk = type(chunk).__name__.endswith("Chunk")
+                    if is_chunk:
+                        streamed_nodes.add(node_name)
+                    elif node_name in streamed_nodes:
+                        # We already streamed chunks for this node, ignore the final AIMessage duplicate
+                        continue
+                        
+                    if hasattr(chunk, "content"):
+                        if chunk.content:
+                            yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
+                        else:
+                            import logging
+                            logging.warning(f"SSE loop received empty chunk from node: {node_name}")
+                            yield f"data: {json.dumps({'type': 'error', 'content': 'Warning: Received empty text chunk from model.'})}\n\n"
 
             # Check if execution paused
             state = orchestrator.get_state(config)
@@ -254,3 +312,41 @@ def generate_title_route(request: ThreadRequest, user_id: int = 1):
         return {"title": title[:50]}
     except Exception:
         return {"title": "New Conversation"}
+
+class FeedbackRequest(BaseModel):
+    thread_id: str
+    question: str
+    answer: str
+    thumbs_up: bool
+    comment: Optional[str] = ""
+    eval_score: Optional[float] = 0.0
+
+@app.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    from agents.feedback_agent import log_feedback
+    
+    # Try to grab the latest eval score from the graph if it wasn't provided
+    eval_score = request.eval_score
+    if eval_score == 0.0:
+        orchestrator = get_orchestrator()
+        config = {"configurable": {"thread_id": request.thread_id}}
+        try:
+            state = orchestrator.get_state(config=config).values
+            eval_score = state.get("eval_score", 0.0)
+        except Exception:
+            pass
+            
+    log_feedback(
+        thread_id=request.thread_id,
+        question=request.question,
+        answer=request.answer,
+        thumbs_up=request.thumbs_up,
+        comment=request.comment,
+        eval_score=eval_score
+    )
+    return {"success": True}
+
+@app.get("/feedback/stats")
+def get_feedback_stats_route():
+    from agents.feedback_agent import get_feedback_stats
+    return get_feedback_stats()

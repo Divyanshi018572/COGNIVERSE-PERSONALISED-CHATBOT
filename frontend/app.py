@@ -7,6 +7,8 @@ import requests
 import json
 import os
 import base64
+import re
+import streamlit.components.v1 as components
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
@@ -30,7 +32,32 @@ if "show_uploader" not in st.session_state:
 if "attached_file_name" not in st.session_state:
     st.session_state["attached_file_name"] = None
 
+if "agent_trace" not in st.session_state:
+    st.session_state["agent_trace"] = []
+
+if "performance_stats" not in st.session_state:
+    st.session_state["performance_stats"] = {"latency": 0.0, "tokens": 0, "tps": 0.0}
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+NODE_LABELS = {
+    "router":           "🧭 Routing to Best Agent",
+    "chat_agent":       "💬 Chat Agent",
+    "reasoning_agent":  "🧠 Reasoning Agent",
+    "coding_agent":     "💻 Coding Agent",
+    "coding_tools":     "🛠️ Executing Tools",
+    "research_agent":   "🔍 Research Agent",
+    "rag_agent":        "📚 RAG Document Agent",
+    "vision_agent":     "👁️ Vision Agent",
+    "memory_agent":     "💾 Extracting Memories",
+    "github_agent":     "🐙 GitHub Architecture Agent",
+    "evaluator":        "⚖️ Quality Audit (High-Res)",
+}
+
+def get_score_color(score: float) -> str:
+    if score >= 0.9: return "green"
+    if score >= 0.7: return "orange"
+    return "red"
 
 def make_request(method, endpoint, **kwargs):
     url = f"{BACKEND_URL}{endpoint}"
@@ -66,6 +93,15 @@ def fetch_threads():
     except Exception:
         pass
     return []
+
+def get_feedback_stats():
+    try:
+        response = make_request("GET", "/feedback/stats")
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
+    return {"total": 0, "positive": 0, "negative": 0, "avg_eval_score": 0.0, "satisfaction_rate": 0.0}
 
 def delete_thread(thread_id: str) -> bool:
     try:
@@ -109,9 +145,57 @@ add_thread(st.session_state["thread_id"])
 
 st.sidebar.title("Cognibot 🧠")
 
+# Dashboard Stats
+stats = get_feedback_stats()
+if stats["total"] > 0:
+    st.sidebar.divider()
+    st.sidebar.subheader("📊 Quality Metrics")
+    colA, colB = st.sidebar.columns(2)
+    with colA:
+        st.metric("Satisfaction", f"{stats['satisfaction_rate']}%")
+    with colB:
+        st.metric("Avg Eval Score", f"{stats['avg_eval_score']}")
+    st.sidebar.caption(f"Based on {stats['total']} responses ({stats['positive']} 👍 / {stats['negative']} 👎)")
+
+st.sidebar.divider()
+st.sidebar.subheader("📡 Agentic Pulse")
+
+# Live Trace Monitor
+if st.session_state["agent_trace"]:
+    for step in st.session_state["agent_trace"][-5:]: # Show last 5 hops
+        status_icon = "🔵" if step["status"] == "active" else "✅"
+        st.sidebar.markdown(f"{status_icon} **{step['label']}**")
+        st.sidebar.caption(f"Time: {step['time']}")
+else:
+    st.sidebar.info("Waiting for agent activation...")
+
+st.sidebar.divider()
+st.sidebar.subheader("🚀 Performance HUD")
+pstats = st.session_state["performance_stats"]
+st.sidebar.markdown(f"**Latency:** `{pstats['latency']:.2f}s`")
+st.sidebar.markdown(f"**Throughput:** `{pstats['tps']:.1f}` tok/s")
+
+st.sidebar.divider()
+
 if st.sidebar.button("＋ New Chat", type="primary"):
     reset_chat()
     st.rerun()
+
+st.sidebar.divider()
+
+with st.sidebar.expander("🐙 GitHub Integration", expanded=False):
+    repo_url = st.text_input("Repository URL", placeholder="https://github.com/user/repo")
+    if st.button("Analyze Repo", use_container_width=True):
+        if repo_url:
+            st.session_state["auto_send"] = f"Analyze the GitHub repository: {repo_url}. Provide the architecture flowchart, tech stack visuals, suggest how to contribute, and provide a command to clone it."
+            st.rerun()
+            
+    st.divider()
+    topic = st.text_input("Topic Search", placeholder="e.g. machine-learning")
+    if st.button("Find Top Repos", use_container_width=True):
+        if topic:
+            st.session_state["auto_send"] = f"Find top repositories for the topic '{topic}' focusing on content, commits, and issues. Present a comparison table."
+            st.rerun()
 
 st.sidebar.divider()
 if st.sidebar.button("📎 Attach File"):
@@ -211,9 +295,168 @@ for tid in st.session_state["chat_threads"][::-1]:
 
 # ── Chat display ──────────────────────────────────────────────────────────────
 
-for message in st.session_state["message_history"]:
+def render_feedback_buttons(question: str, answer: str, msg_id: str):
+    col1, col2, col3 = st.columns([1, 1, 8])
+    feedback_key = f"feedback_{msg_id}"
+    
+    if feedback_key not in st.session_state:
+        with col1:
+            if st.button("👍", key=f"up_{feedback_key}"):
+                make_request("POST", "/feedback", json={
+                    "thread_id": st.session_state["thread_id"],
+                    "question": question,
+                    "answer": answer,
+                    "thumbs_up": True
+                })
+                st.session_state[feedback_key] = "positive"
+                st.rerun()
+        with col2:
+            if st.button("👎", key=f"down_{feedback_key}"):
+                st.session_state[feedback_key] = "negative_pending"
+                st.rerun()
+                
+    if st.session_state.get(feedback_key) == "negative_pending":
+        comment = st.text_input("What went wrong?", key=f"comment_{feedback_key}")
+        if st.button("Submit Feedback", key=f"submit_{feedback_key}"):
+            make_request("POST", "/feedback", json={
+                "thread_id": st.session_state["thread_id"],
+                "question": question,
+                "answer": answer,
+                "thumbs_up": False,
+                "comment": comment
+            })
+            st.session_state[feedback_key] = "negative"
+            st.session_state["auto_send"] = f"Please improve your previous response based on this feedback: {comment}"
+            st.rerun()
+            
+    elif st.session_state.get(feedback_key) in ["positive", "negative"]:
+        with col1:
+            st.caption("✅ Feedback recorded")
+
+
+def render_message_with_mermaid(content: str):
+    """Parses markdown content and safely renders Mermaid blocks via HTML components."""
+    parts = re.split(r'```mermaid\n(.*?)\n```', content, flags=re.DOTALL)
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            if part.strip():
+                st.markdown(part)
+        else:
+            # Safely encode the mermaid string for javascript
+            clean_part = part.strip()
+            
+            # AI models often hallucinate `-->|text|>` instead of `-->|text|`. Fix it automatically.
+            clean_part = re.sub(r'\|([^|]+)\|>', r'|\1|', clean_part)
+            
+            safe_code = json.dumps(clean_part)
+            
+            mermaid_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        html, body {{
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            overflow: hidden;
+            color: white;
+            font-family: sans-serif;
+        }}
+        #output {{
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #0e1117;
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        #output svg {{
+            max-width: 100% !important;
+            max-height: 100% !important;
+            width: auto !important;
+            height: auto !important;
+        }}
+    </style>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({{ 
+            startOnLoad: false, 
+            theme: 'base',
+            themeVariables: {{
+                primaryColor: '#ff4b4b',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#ff4b4b',
+                lineColor: '#6e7681',
+                secondaryColor: '#1f2937',
+                tertiaryColor: '#111827',
+                mainBkg: '#0e1117',
+                nodeBorder: '#30363d',
+                clusterBkg: '#161b22',
+                clusterBorder: '#30363d',
+                defaultLinkColor: '#8b949e',
+                titleColor: '#58a6ff',
+                edgeLabelBackground:'#1f2937'
+            }},
+            securityLevel: 'loose',
+            flowchart: {{ 
+                useMaxWidth: true, 
+                htmlLabels: true,
+                curve: 'basis'
+            }}
+        }});
+        
+        async function renderDiagram() {{
+            const code = {safe_code};
+            try {{
+                const {{ svg }} = await mermaid.render('mermaid-svg', code);
+                document.getElementById('output').innerHTML = svg;
+            }} catch (err) {{
+                document.getElementById('output').innerHTML = '<span style="color:red">Mermaid Syntax Error</span><br><pre style="color:red;font-size:10px">' + err + '</pre><pre style="font-size:10px;color:white;">' + code + '</pre>';
+            }}
+        }}
+        window.addEventListener('load', renderDiagram);
+    </script>
+</head>
+<body>
+    <div id="output">Rendering diagram...</div>
+</body>
+</html>"""
+            st.components.v1.html(mermaid_html, height=500, scrolling=False)
+
+
+
+for i, message in enumerate(st.session_state["message_history"]):
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["role"] == "assistant":
+            render_message_with_mermaid(message["content"])
+            
+            # Persistent Confidence Badge
+            if "score" in message:
+                score = message["score"]
+                color = get_score_color(score)
+                badge_html = f"""
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 4px 12px; background-color: #161b22; border-radius: 16px; border: 1px solid #30363d; width: fit-content;">
+                    <span style="font-size: 14px;">🛡️ Auditor Confidence:</span>
+                    <b style="color: {color}; font-size: 14px;">{int(score*100)}%</b>
+                </div>
+                """
+                st.markdown(badge_html, unsafe_allow_html=True)
+                if score < 0.9 and "critique" in message:
+                    st.caption(f"📝 **Auditor Note:** {message['critique']}")
+        else:
+            st.markdown(message["content"])
+        
+        # Render feedback buttons for AI messages (excluding if interrupted)
+        if message["role"] == "assistant" and "interrupt" not in message:
+            # Get the previous human message as the question
+            prev_msg = st.session_state["message_history"][i-1] if i > 0 else None
+            question = prev_msg["content"] if prev_msg and prev_msg["role"] == "user" else "N/A"
+            msg_id = message.get("id", f"{i}_{hash(message['content'])}")
+            render_feedback_buttons(question, message["content"], msg_id)
         
         if "interrupt" in message:
             st.warning("⚠️ **Approval Required:** The agent wants to execute the following actions:")
@@ -239,17 +482,6 @@ for message in st.session_state["message_history"]:
                     del message["interrupt"]
                     st.rerun()
 
-NODE_LABELS = {
-    "router":           "🧭 Routing to Best Agent",
-    "chat_agent":       "💬 Chat Agent",
-    "reasoning_agent":  "🧠 Reasoning Agent",
-    "coding_agent":     "💻 Coding Agent",
-    "coding_tools":     "🛠️ Executing Tools",
-    "research_agent":   "🔍 Research Agent",
-    "rag_agent":        "📚 RAG Document Agent",
-    "vision_agent":     "👁️ Vision Agent",
-    "memory_agent":     "💾 Extracting Memories",
-}
 
 def run_stream(payload, status, message_placeholder):
     full_response = ""
@@ -257,6 +489,13 @@ def run_stream(payload, status, message_placeholder):
     first_visible_node = True
     interrupted = False
     tool_calls = None
+    current_score = None
+    current_critique = None
+    
+    # Dashboard Tracking
+    st.session_state["agent_trace"] = [] # Reset for new turn
+    start_time = time.time()
+    token_count = 0
 
     try:
         with requests.post(
@@ -284,12 +523,35 @@ def run_stream(payload, status, message_placeholder):
                                     status.update(label="🚫 Unsafe Content", state="error")
                                     status.write(f":red[**{reason}**]")
                                 elif node_name in NODE_LABELS:
+                                    label = NODE_LABELS[node_name]
+                                    # Update Live Trace
+                                    st.session_state["agent_trace"].append({
+                                        "node": node_name,
+                                        "label": label,
+                                        "time": time.strftime("%H:%M:%S"),
+                                        "status": "active"
+                                    })
                                     if first_visible_node:
-                                        status.update(label="⚙️ Orchestrating...", state="running")
+                                        status.update(label=f"⚙️ {label} Active...", state="running")
                                         first_visible_node = False
-                                    status.write(f"✅ {NODE_LABELS[node_name]}")
+                                    else:
+                                        status.write(f"✅ {label} Complete")
+                                    
+                                    label = NODE_LABELS[node_name]
+                                    if node_name == "evaluator":
+                                        current_score = data.get("score", 0.0)
+                                        current_critique = data.get("critique", "")
+                                        color = get_score_color(current_score)
+                                        label = f"{label} - :{color}[**{int(current_score*100)}% Confidence**]"
+                                        status.write(f"✅ {label}")
+                                        if current_score < 0.9:
+                                            with status:
+                                                st.caption(f"Critique: {current_critique}")
+                                    else:
+                                        status.write(f"✅ {label}")
 
                             elif event_type == "token":
+                                token_count += 1
                                 if first_token:
                                     status.update(label="✍️ Generating response...", state="running")
                                     first_token = False
@@ -310,15 +572,33 @@ def run_stream(payload, status, message_placeholder):
 
         if not interrupted:
             status.update(label="✅ Done", state="complete", expanded=False)
-        message_placeholder.markdown(full_response)
-        return full_response, interrupted, tool_calls
+        # Re-render the final response using our mermaid helper instead of simple markdown
+        message_placeholder.empty() # Clear the streaming placeholder
+        with message_placeholder.container():
+            render_message_with_mermaid(full_response)
+            
+        # Finalize Dashboard Stats
+        end_time = time.time()
+        duration = end_time - start_time
+        tps = token_count / duration if duration > 0 else 0
+        st.session_state["performance_stats"] = {
+            "latency": duration,
+            "tokens": token_count,
+            "tps": tps
+        }
+        # Mark all as complete
+        for step in st.session_state["agent_trace"]:
+            step["status"] = "complete"
+
+        return full_response, interrupted, tool_calls, current_score, current_critique
 
     except Exception as e:
         status.update(label="❌ Failed", state="error", expanded=False)
         st.error(f"Error communicating with backend: {e}")
         full_response = "Sorry, I am unable to connect to the backend server right now."
-        message_placeholder.markdown(full_response)
-        return full_response, False, None
+        with message_placeholder.container():
+            render_message_with_mermaid(full_response)
+        return full_response, False, None, None, None
 
 # ── Resume Interceptor ────────────────────────────────────────────────────────
 if "resume_action" in st.session_state:
@@ -328,17 +608,24 @@ if "resume_action" in st.session_state:
         message_placeholder = st.empty()
         
         payload = {"message": "", "thread_id": st.session_state["thread_id"], "action": action}
-        full_response, interrupted, tool_calls = run_stream(payload, status, message_placeholder)
+        full_response, interrupted, tool_calls, score, critique = run_stream(payload, status, message_placeholder)
         
         msg_data = {"role": "assistant", "content": full_response}
         if interrupted:
             msg_data["interrupt"] = tool_calls
+        if score is not None:
+            msg_data["score"] = score
+            msg_data["critique"] = critique
             
         st.session_state["message_history"].append(msg_data)
     st.rerun()
 
 # ── Chat input ─────────────────────────────────────────────────────────────
 user_input = st.chat_input("Type here")
+auto_send = st.session_state.pop("auto_send", None)
+
+if auto_send:
+    user_input = auto_send
 
 if user_input:
     st.session_state["message_history"].append({"role": "user", "content": user_input})
@@ -359,11 +646,14 @@ if user_input:
             # the backend sets task='rag' and routes to the RAG agent.
             payload["file_name"] = file_name
 
-        full_response, interrupted, tool_calls = run_stream(payload, status, message_placeholder)
+        full_response, interrupted, tool_calls, score, critique = run_stream(payload, status, message_placeholder)
 
         msg_data = {"role": "assistant", "content": full_response}
         if interrupted:
             msg_data["interrupt"] = tool_calls
+        if score is not None:
+            msg_data["score"] = score
+            msg_data["critique"] = critique
             
         st.session_state["message_history"].append(msg_data)
 

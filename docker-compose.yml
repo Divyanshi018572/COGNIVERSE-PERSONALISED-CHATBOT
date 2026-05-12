@@ -30,6 +30,10 @@ services:
       - LOG_LEVEL=INFO
       - POSTGRES_URI=postgresql://user:password@postgres:5432/chatbot_db
       - REDIS_URI=redis://redis:6379/0
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-Cognibot_Local}
     depends_on:
       - postgres
       - redis

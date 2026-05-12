@@ -3,15 +3,20 @@ from models.fallback import get_model_with_fallback
 from agents.chat_agent import AgentState
 from agents.tools import get_coding_tools
 
+from core.router import TASK_MODEL_MAP
+
 def coding_agent_node(state: AgentState):
-    primary_llm = get_model_with_fallback("meta/llama-3.3-70b-instruct")
-    fallback_llm = get_model_with_fallback("qwen/qwen2.5-coder-32b-instruct")
+    primary_model = TASK_MODEL_MAP.get("coding", "qwen/qwen2.5-coder-32b-instruct")
+    primary_llm = get_model_with_fallback(primary_model)
+    fallback_llm = get_model_with_fallback("groq/llama-3.3-70b-versatile")
     
     messages = list(state["messages"])
     
     if not any(isinstance(m, SystemMessage) for m in messages):
+        from core.prompts import FORMATTING_DIRECTIVE
         sys_msg = SystemMessage(content=(
             "You are an expert software engineer. You have access to a Python REPL tool, local File Management tools, and a GitHub Search tool. "
+            f"{FORMATTING_DIRECTIVE}\n"
             "CRITICAL RULES: "
             "1. CODE GENERATION: When asked to write or generate code, simply output the complete code in standard markdown blocks (e.g. ```python). Do NOT invoke the execution tools automatically. "
             "2. ENGAGEMENT: After providing the code, always ask the user an engaging follow-up question (e.g., 'Should I explain this in more detail?', 'Would you like me to execute this to verify it works?', or 'Are there any specific edge cases we should handle?'). "
@@ -27,6 +32,17 @@ def coding_agent_node(state: AgentState):
     
     trace = state.get("agent_trace", []) + ["coding_agent"]
     
+    # High-Resolution Self-Correction: Inject feedback if we are in a retry loop
+    feedback = state.get("eval_feedback")
+    if feedback and state.get("retry_count", 0) > 0:
+        from langchain_core.messages import HumanMessage
+        messages = list(messages)
+        messages.append(HumanMessage(content=(
+            f"⚠️ YOUR PREVIOUS RESPONSE FAILED QUALITY AUDIT.\n"
+            f"{feedback}\n"
+            "Please regenerate your response and fix ALL the issues mentioned above."
+        )))
+
     response = llm_with_tools.invoke(messages)
     
     return {"messages": [response], "agent_trace": trace}

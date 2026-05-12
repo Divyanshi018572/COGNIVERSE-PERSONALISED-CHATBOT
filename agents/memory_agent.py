@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from agents.chat_agent import AgentState
 from models.fallback import get_model_with_fallback
+from core.router import route, RoutingDecision, TASK_MODEL_MAP
 from core.db import save_facts
 from utils.logger import get_logger
 
@@ -32,8 +33,8 @@ def memory_extraction_node(state: AgentState, config: RunnableConfig):
     
     user_prompt = HumanMessage(content=chat_text)
     
-    # We use Groq's Llama-3.3 for extreme speed and JSON capability
-    llm = get_model_with_fallback("meta/llama-3.3-70b-instruct")
+    model_name = TASK_MODEL_MAP.get("memory", "groq/llama-3.3-70b-versatile")
+    llm = get_model_with_fallback(model_name)
     
     try:
         response = llm.invoke([sys_prompt, user_prompt])

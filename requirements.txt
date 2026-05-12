@@ -6,6 +6,7 @@ fastapi>=0.100.0
 uvicorn[standard]>=0.22.0
 httpx>=0.24.0
 pydantic>=2.0.0
+python-multipart>=0.0.9
 
 # LangChain ecosystem
 langchain>=0.2.0
@@ -16,9 +17,15 @@ langchain-google-genai>=1.0.0
 langchain-groq>=0.1.0
 langgraph>=0.2.0
 langgraph-checkpoint-sqlite>=1.0.0
+langgraph-checkpoint-postgres>=1.0.0
 
-# Vector DB
+# Vector DB & Document Processing
 chromadb>=0.5.0
+pypdf>=4.0.0
+python-docx>=1.1.0
+pandas>=2.0.0
+pillow>=10.0.0
+openpyxl>=3.1.0
 
 # RAG extras
 rank-bm25>=0.2.2                 # BM25 keyword search for hybrid RAG
@@ -29,32 +36,21 @@ tavily-python>=0.3.0
 arxiv>=2.1.0
 langchain-experimental>=0.0.60
 
-# File parsing
-pypdf>=4.0.0
-python-docx>=1.1.0
-pandas>=2.0.0
-pillow>=10.0.0
-openpyxl>=3.1.0
-
-# Resilience
+# Resilience & Utils
 tenacity>=8.2.0
-
-# Utils
 python-dotenv>=1.0.0
 structlog>=24.0.0
 
 # Infrastructure & Concurrency
 psycopg[binary]>=3.1.0
 redis>=5.0.0
-langgraph-checkpoint-postgres>=1.0.0
-
-# Vector DB & Document Processing
-chromadb>=0.4.22
-python-multipart>=0.0.9
 
 # Authentication & Security
 PyJWT>=2.8.0
 bcrypt>=4.0.0
 email-validator>=2.0.0
 python-jose[cryptography]==3.3.0
-httpx==0.27.0
+
+# Model Context Protocol (MCP)
+mcp
+fastmcp

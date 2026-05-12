@@ -22,6 +22,9 @@ def get_llm(model: str, temperature: float = 0.7) -> ChatOpenAI:
             temperature=temperature,
         )
     if model.startswith("gemini"):
+        # Ensure we use a valid model name for v1beta API
+        if model == "gemini-1.5-flash":
+            model = "gemini-1.5-flash-latest"
         return ChatGoogleGenerativeAI(
             model=model,
             google_api_key=GOOGLE_KEY,
@@ -38,6 +41,20 @@ def get_llm(model: str, temperature: float = 0.7) -> ChatOpenAI:
             max_retries=0,
             request_timeout=60,
         )
+        
+    if "qwen" in model.lower():
+        return ChatOpenAI(
+            model=model,
+            openai_api_base=NVIDIA_BASE,
+            openai_api_key=NVIDIA_KEY,
+            temperature=temperature,
+            max_retries=0,
+            request_timeout=120,
+            max_tokens=4096,
+            streaming=False,
+            model_kwargs={"stream": False}
+        )
+
     # Default: NVIDIA NIM
     return ChatOpenAI(
         model=model,
@@ -45,7 +62,10 @@ def get_llm(model: str, temperature: float = 0.7) -> ChatOpenAI:
         openai_api_key=NVIDIA_KEY,
         temperature=temperature,
         max_retries=0,
-        request_timeout=60,
+        request_timeout=120,
+        max_tokens=2048,
+        streaming=False,
+        model_kwargs={"stream": False}
     )
 
 

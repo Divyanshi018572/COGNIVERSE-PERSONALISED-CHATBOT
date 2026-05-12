@@ -7,13 +7,14 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 TASK_MODEL_MAP = {
-    "chat":      "groq/llama-3.3-70b-versatile",  # Switched to latest Groq model
+    "chat":      "groq/llama-3.3-70b-versatile",
     "reasoning": "deepseek-ai/deepseek-r1",
     "coding":    "qwen/qwen2.5-coder-32b-instruct",
     "rag":       "nvidia/llama-3.3-nemotron-super-49b-v1",
     "research":  "meta/llama-3.3-70b-instruct",
-    "vision":    "meta/llama-3.2-90b-vision-instruct",
-    "ocr":       "meta/llama-3.2-90b-vision-instruct",
+    "vision":    "meta/llama-3.2-11b-vision-instruct",
+    "ocr":       "meta/llama-3.2-11b-vision-instruct",
+    "github":    "meta/llama-3.3-70b-instruct",
 }
 
 VISION_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -48,6 +49,11 @@ INTENT_SAMPLES = {
     "chat": [
         "hi, how are you", "what's your name", "tell me a joke",
         "I'm feeling sad today", "hello there", "good morning"
+    ],
+    "github": [
+        "analyze the github repository", "find top repositories for topic",
+        "search github", "clone this repo", "how to contribute to this repo",
+        "github architecture"
     ]
 }
 
@@ -75,6 +81,14 @@ class RoutingDecision:
     agent: str
 
 def route(user_input: str, file_path: str | None = None) -> RoutingDecision:
+    # Ensure user_input is a valid string
+    if not isinstance(user_input, str):
+        user_input = str(user_input or "")
+    
+    user_input = user_input.strip()
+    if not user_input and not file_path:
+        return RoutingDecision("chat", TASK_MODEL_MAP["chat"], "chat")
+
     if file_path:
         ext = "." + file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
         if ext in VISION_EXTS:
@@ -88,7 +102,9 @@ def route(user_input: str, file_path: str | None = None) -> RoutingDecision:
         
     if embedding_model is not None and INTENT_EMBEDDINGS:
         try:
-            input_emb = embedding_model.embed_query(user_input)
+            # Truncate to avoid NVIDIA 512 token limit when history gets long
+            truncated_input = user_input[:1500]
+            input_emb = embedding_model.embed_query(truncated_input)
             
             best_intent = "chat"
             max_sim = -1.0

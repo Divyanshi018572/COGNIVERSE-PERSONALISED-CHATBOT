@@ -6,4 +6,7 @@ __pycache__/
 *.log
 .DS_Store
 venv/
-
+chroma_db/
+*.db
+*.sqlite3
+.pytest_cache/

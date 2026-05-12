@@ -1,184 +1,195 @@
-# Low Level Design (Engineering Depth)
+# Low Level Engineering Design (LLD)
+### Cognibot Codebase Architecture & Execution Flow
+
+---
 
 ### Section 1 — Codebase Architecture Map
 
-```
-repo/
+```text
+Cognibot/
 ├── backend/
-│   └── main.py              → API Gateway → Exposes FastAPI REST & SSE endpoints
-├── frontend/
-│   └── app.py               → UI Client   → Streamlit interface consuming FastAPI
+│   └── main.py             → [Entry Point] → FastAPI endpoints, SSE streaming generator
 ├── core/
-│   ├── orchestrator.py      → State Machine → Compiles LangGraph StateGraph & nodes
-│   └── router.py            → Logic       → Intent classification (keyword-based)
+│   ├── graph.py            → [Orchestrator] → LangGraph edge definitions, node bindings
+│   └── router.py           → [Routing logic] → Semantic routing, TASK_MODEL_MAP
 ├── agents/
-│   ├── safety_agent.py      → Guardrails  → Fast blocklist & LLM safety check
-│   ├── chat_agent.py        → General AI  → Uses Llama-3.3-70B
-│   ├── reasoning_agent.py   → CoT AI      → Uses DeepSeek-R1
-│   ├── coding_agent.py      → Code AI     → Uses Qwen2.5-Coder
-│   └── research_agent.py    → Search AI   → Uses Tavily + Llama-3.3-70B
+│   ├── chat_agent.py       → [Node] → Generic conversational logic
+│   ├── coding_agent.py     → [Node] → Qwen 2.5 Code generation + REPL tool integration
+│   ├── evaluator_agent.py  → [Node] → LLM-as-a-judge, JSON validation, retry loops
+│   ├── rag_agent.py        → [Node] → Document synthesis, prompt compliance
+│   ├── research_agent.py   → [Node] → Tavily + ArXiv multi-hop tool routing
+│   ├── safety_agent.py     → [Node] → Prompt injection interception
+│   └── tools.py            → [Utilities] → Tool definitions (Search, REPL, Python)
+├── rag/
+│   ├── hybrid_retriever.py → [Pipeline] → BM25 + FAISS concurrent retrieval
+│   ├── reranker.py         → [Pipeline] → Cross-encoder re-ranking top-k documents
+│   └── ingest.py           → [Data Prep] → Semantic chunking, embedding generation
 ├── models/
-│   ├── nvidia.py            → Provider    → Instantiates LangChain Chat models
-│   └── fallback.py          → Resilience  → Tenacity retries + RateLimiter routing
+│   ├── fallback.py         → [Wrapper] → Instantiation try/catch for resilience
+│   └── nvidia.py           → [Wrapper] → LLM specific init, OpenRouter/Google branching
 └── utils/
-    ├── logger.py            → Observability→ `structlog` configuration
-    └── rate_limiter.py      → Throttling  → Thread-safe sliding window
+    └── rate_limiter.py     → [Infra] → Redis sliding-window algorithm, Fallback Chains
 ```
 
 **Evaluation:**
-- **Separation of concerns:** High. Excellent decouple of UI, API, Orchestration, and Models.
-- **Testability:** High. Individual agent nodes can be unit tested without spinning up the graph.
-- **Configurability:** Medium. Rate limits and models are somewhat hardcoded in `utils/rate_limiter.py` and `models/nvidia.py` instead of injected via config files.
+- **Separation of Concerns:** High. State management (`core`), behavior (`agents`), and infrastructure (`utils`/`models`) are strictly isolated.
+- **Testability:** Moderate. Testing LLM nodes requires mocking `ChatOpenAI`. 
+- **Configurability:** High. Adding a new model is as simple as updating `TASK_MODEL_MAP` and `RATE_LIMITS`.
 
-### Section 2 — Pipeline Flow (LangGraph Internal)
+---
+
+### Section 2 — Pipeline Flow (Code Level)
 
 ```mermaid
 graph TD
-    Input["User Message"]
+    Request["POST /chat JSON Payload"]
+    Parse["Parse thread_id, query"]
     Safety["safety_node()"]
-    Blocked["blocked_node()"]
+    CheckSafe{"is_safe == true?"}
     Router["router_node()"]
-    Chat["chat_agent_node()"]
-    Reasoning["reasoning_agent_node()"]
-    Coding["coding_agent_node()"]
-    Research["research_agent_node()"]
-    End["END"]
-
-    Input --> Safety
-    Safety -- SAFE --> Router
-    Safety -- UNSAFE --> Blocked
-    Blocked --> End
+    TargetAgent["[coding|rag|chat]_node()"]
+    RateLimitCheck["rate_limiter.get_available_model()"]
+    Fallback["FALLBACK_CHAIN traversal"]
+    ExecuteLLM["llm.invoke()"]
+    Evaluator["evaluator_agent_node()"]
+    JSONParse["extract_json_from_llm()"]
+    RetryCheck{"needs_retry == true?"}
+    Yield["SSE yield chunk"]
     
-    Router -- "chat" --> Chat
-    Router -- "reasoning" --> Reasoning
-    Router -- "coding" --> Coding
-    Router -- "research" --> Research
-    
-    Chat --> End
-    Reasoning --> End
-    Coding --> End
-    Research --> End
+    Request --> Parse
+    Parse --> Safety
+    Safety --> CheckSafe
+    CheckSafe -- No --> Yield
+    CheckSafe -- Yes --> Router
+    Router --> TargetAgent
+    TargetAgent --> RateLimitCheck
+    RateLimitCheck -->|RPM > Limit| Fallback
+    RateLimitCheck -->|RPM < Limit| ExecuteLLM
+    Fallback --> ExecuteLLM
+    ExecuteLLM --> Evaluator
+    Evaluator --> JSONParse
+    JSONParse --> RetryCheck
+    RetryCheck -- Yes --> TargetAgent
+    RetryCheck -- No --> Yield
 ```
 
-### Section 3 — Function-Level Breakdown
+---
+
+### Section 3 — Function-Level Breakdown (Critical Path)
 
 ```text
-Function: check_safety
-File: agents/safety_agent.py
-Input: str (user_input)
-Output: tuple[bool, str]
-What it does: Runs a fast Regex keyword check, then falls back to an LLM semantic check for safety policy violations.
-Hidden bugs: The `except Exception` returns `True, "check skipped"`. This fail-open design could expose the application to malicious prompts during API downtime.
-How to improve: Depending on risk tolerance, change to fail-closed, or add an explicit timeout to the safety LLM call.
-
-Function: route
-File: core/router.py
-Input: str (user_input), Optional[str] (file_path)
-Output: RoutingDecision
-What it does: Uses keyword string matching to determine the intent of the prompt and assign an agent/model.
-Hidden bugs: Order of `if` statements matters. `CODE_KEYWORDS` checked before `REASONING_KEYWORDS` means overlapping intents might misroute.
-How to improve: Replace keyword matching with semantic embedding classification.
-
-Function: get_model_with_fallback
-File: models/fallback.py
-Input: str (primary_model), float (temperature)
-Output: BaseChatModel
-What it does: Consults the `rate_limiter` to get an available model from the fallback chain, records the request, and returns the instantiated LangChain model.
-Hidden bugs: If the rate limiter is out of sync with actual API limits, the returned model might still immediately throw a 429.
-How to improve: Ensure `Tenacity` catches the 429 and recurses back into this function to pick the *next* fallback.
+Function: get_available_model
+File: utils/rate_limiter.py
+Input: primary_model (str)
+Output: actual_model (str)
+What it does: Checks Redis if primary_model > 35 RPM. If yes, traverses FALLBACK_CHAIN until it finds an available model.
+Hidden bugs: If ALL models in the chain are exhausted, it throws a KeyError.
+How to improve: Add a hard-stop generic exception to return a polite "System overloaded" message to the UI.
 ```
 
-### Section 4 — API Layer Design (FastAPI)
+```text
+Function: evaluator_agent_node
+File: agents/evaluator_agent.py
+Input: state (AgentState)
+Output: Updated AgentState (dict)
+What it does: Injects Ground Truth context and generated answer into a strict JSON-demanding prompt to audit for hallucinations.
+Hidden bugs: LLMs frequently wrap JSON in markdown (```json ... ```).
+How to improve: Already mitigated via `re.search(r'\{.*\}', text)`. Could be improved using `PydanticOutputParser` and `with_structured_output`.
+```
 
 ```text
-Endpoint: POST /chat/stream
-Request: 
-{ 
-  "message": "Write a python script...", 
-  "thread_id": "uuid-1234" 
+Function: rag_agent_node
+File: agents/rag_agent.py
+Input: state (AgentState)
+Output: Updated AgentState (dict)
+What it does: Executes Hybrid Retrieval, Reranks, and injects context into a strictly factual system prompt.
+Hidden bugs: Reasoning models (like Llama-3.3-Nemotron) occasionally return empty `content` strings while "thinking".
+How to improve: Already mitigated via explicit `if not response.content.strip(): raise ValueError(...)`.
+```
+
+---
+
+### Section 4 — API Layer Design
+
+**Endpoint:** `POST /api/chat`
+**Streaming:** Server-Sent Events (SSE) via `StreamingResponse`
+**Request Schema:**
+```json
+{
+  "message": "Write a python script to parse CSV.",
+  "thread_id": "uuid-1234",
+  "system_prompt": "Optional user override"
 }
-Response: HTTP/1.1 200 OK (Content-Type: text/event-stream)
-data: {"content": "Here is..."}
-data: {"content": " the code..."}
-data: [DONE]
-Missing: JWT Authentication, Rate Limiting Middleware (at the API gateway level, not just the LLM level), Input Validation limits (max string length).
 ```
+**Response Format (Yielded Chunks):**
+```json
+// Token Chunk
+{"type": "token", "content": "import pandas as pd"}
+// Status/Node Chunk
+{"type": "status", "content": "Running Coding Agent..."}
+// Error Chunk
+{"type": "error", "content": "API Rate Limit Exhausted"}
+```
+**Missing in Production:** 
+- JWT Authentication / API Key Bearer tokens.
+- Request rate limiting at the API Gateway level (separate from LLM rate limiting).
+
+---
 
 ### Section 5 — Edge Case Catalog
 
-| Input Scenario | Current Behavior | Expected Behavior | Fix Required |
-|---------------|-----------------|-------------------|-------------|
-| 100,000 char input | Passed to Safety/LLM | Rejected by API | Add `MaxLength` validation in Pydantic schema. |
-| SQLite lock | Exception thrown, SSE connection drops | Retry with exponential backoff | Add `Tenacity` retries around the `orchestrator.stream()` call. |
-| Tavily API down | Exception caught, `pass` | Continue without context | None (designed to be resilient). |
+| Input Scenario | Current Behavior | Expected Behavior |
+|---------------|-----------------|-------------------|
+| **Primary LLM goes down (500 Error)** | `fallback_instantiation_failed` logged. | System cascades to the next fallback seamlessly. |
+| **User asks speculative question in RAG** | Agent refuses to speculate based on strict prompt rules. | System enforces factual boundaries without hallucinating. |
+| **Evaluator LLM outputs plain text instead of JSON** | Regex extractor fails, throws `JSONDecodeError`, defaults to `EvalResult(needs_retry=False)` to prevent infinite loop. | Bypasses audit to ensure user gets a response rather than a server crash. |
+| **User uploads massive 10,000 page PDF** | Ingest route attempts to process immediately. | Should be offloaded to a background Celery/Redis Queue task. |
+
+---
 
 ### Section 6 — Refactoring Blueprint
 
-**Before (core/router.py):**
+**Before (Brittle JSON Parsing in Evaluator):**
 ```python
-if any(k in text for k in CODE_KEYWORDS):
-    return RoutingDecision("coding", ...)
-if any(k in text for k in REASONING_KEYWORDS):
-    return RoutingDecision("reasoning", ...)
+raw_text = response.content
+try:
+    data = json.loads(raw_text)
+except json.JSONDecodeError:
+    # manual regex matching
+    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+    data = json.loads(match.group(0))
 ```
 
-**After:**
+**After (Pydantic Structured Output):**
 ```python
-# refactored version
-# Pre-compute embeddings for intents, use cosine similarity
-def route(user_input: str) -> RoutingDecision:
-    input_emb = get_fast_embedding(user_input)
-    best_intent = max(INTENT_EMBEDDINGS.keys(), key=lambda k: cosine_sim(input_emb, INTENT_EMBEDDINGS[k]))
-    return RoutingDecision(best_intent, ...)
+from pydantic import BaseModel, Field
+
+class EvalResult(BaseModel):
+    needs_retry: bool = Field(description="True if hallucination or error detected")
+    faithfulness: float = Field(description="Score between 0.0 and 1.0")
+
+# LangChain automatically handles the JSON formatting, extraction, and retries natively
+structured_llm = llm.with_structured_output(EvalResult)
+result = structured_llm.invoke(messages)
 ```
-**Why:** Brittle keyword matching fails in production. Semantic routing handles nuance and synonyms gracefully.
+**Why:** Hand-rolling regex for JSON extraction is fragile. `with_structured_output` leverages native OpenAI/NVIDIA tool-calling APIs to guarantee schema adherence.
 
-### Section 7 — Productionization Checklist
+---
 
-```
-[x] requirements.txt with pinned versions
-[x] Dockerfile with multi-stage build
-[x] Environment variable management (.env / secrets manager)
-[x] Logging (structured JSON logs via structlog)
-[ ] Error handling (no bare except) - Partial
-[x] Input validation (pydantic / marshmallow) - Basic in FastAPI
-[ ] Model versioning strategy
-[ ] Artifact storage (S3 / GCS / local)
-[x] Health check endpoint (`/health`)
-[ ] Graceful shutdown
-[x] CI/CD pipeline - Partial (Docker-compose)
-[ ] Model registry
-[ ] A/B testing capability
-[ ] Rollback mechanism
-[x] Documentation
-```
+### Section 7 — Production Upgrade Plan (30-Day)
 
-# 🔥 MANDATORY FINAL SECTION
+**Week 1: Hardening the Frontend-Backend Contract**
+- Implement Pydantic schema validation for all FastAPI incoming payloads.
+- Migrate manual JSON parsing to `with_structured_output`.
 
-## ❌ Complete Gap List
-1. **Concurrency State Management:** SQLite `check_same_thread=False` with LangGraph checkpointer will lock or corrupt under high concurrent traffic. Must migrate to PostgreSQL.
-2. **Observability:** Missing LangSmith tracing.
-3. **Automated Evaluation:** No RAGAS or TruLens CI/CD gates to ensure agent accuracy doesn't regress.
+**Week 2: Scaling Ingestion**
+- Move `ingest.py` synchronous logic into a background `Celery` worker.
+- Replace local `FAISS` with a distributed vector database like `Qdrant` or `Pinecone`.
 
-## 🚀 30-Day Production Upgrade Plan
-- **Week 1:** Migrate SQLite checkpointer to `PostgresSaver`. Configure PgBouncer.
-- **Week 2:** Implement Semantic Routing to replace keyword-based routing in `core/router.py`.
-- **Week 3:** Integrate LangSmith for tracing and implement automated unit tests for each agent node.
-- **Week 4:** Implement RAGAS evaluation pipeline to score LLM outputs on a golden dataset before merging changes.
+**Week 3: Observability**
+- Hook LangGraph traces directly into `LangSmith` or `Datadog` for visualizing token usage per node.
+- Implement explicit billing tags per `thread_id`.
 
-## 🎯 Interview Trap List
-1. **Trap:** "Streamlit is great, why did you spend time building a FastAPI backend?"
-   **Answer:** A junior developer says "FastAPI is faster." The correct answer is: "Streamlit's execution model ties backend logic to UI state reruns. Decoupling ensures the LLM orchestration can scale horizontally, prevents memory leaks, and allows multi-client integration (e.g., mobile apps) using the exact same LangGraph state."
-2. **Trap:** "Why use LangGraph instead of standard LangChain chains?"
-   **Answer:** Chains are linear. LangGraph enables cycles (loops), which are essential for true agentic behavior (e.g., an agent writing code, running it, seeing an error, and looping back to fix it).
-
-## 📊 Final Maturity Score
-
-| Dimension | Score (1–10) | Verdict |
-|-----------|-------------|---------|
-| ML / GenAI Engineering | 8 | Excellent use of specialized models and fallback architectures. |
-| System Design | 7 | Decoupled architecture is strong, but SQLite state holds it back. |
-| Code Quality | 7 | Modular, but some hardcoded configurations and brittle routing. |
-| Production Readiness | 6 | Needs Postgres, Auth, and Tracing. |
-| Interview Strength | 9 | Excellent technical narrative regarding trade-offs. |
-| **Overall** | 7.4 | **Solid Senior** |
+**Week 4: Security & Access Control**
+- Implement OAuth2 JWT authentication on the `/api/chat` route.
+- Add user-scoped routing to the Vector DB to ensure tenant isolation.

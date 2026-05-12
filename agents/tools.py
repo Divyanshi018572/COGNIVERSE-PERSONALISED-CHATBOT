@@ -6,4 +6,5 @@ def get_coding_tools():
     repl_tool = PythonREPLTool()
     file_toolkit = FileManagementToolkit(root_dir=".")
     file_tools = file_toolkit.get_tools()
-    return [repl_tool, search_github] + file_tools
+    
+    return [repl_tool, search_github] + list(file_tools)

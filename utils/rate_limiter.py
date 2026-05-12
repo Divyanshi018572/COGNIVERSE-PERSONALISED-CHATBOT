@@ -7,30 +7,46 @@ logger = get_logger(__name__)
 
 # ── Model rate limits (NVIDIA NIM free tier: 40 RPM) ─────────────────────────
 RATE_LIMITS = {
+    # NVIDIA NIM — kept at 35 (safely under 40 RPM free tier ceiling)
+    "nvidia/llama-3.3-nemotron-super-49b-v1": 35,
     "meta/llama-3.3-70b-instruct":            35,
     "deepseek-ai/deepseek-r1":                35,
     "qwen/qwen2.5-coder-32b-instruct":        35,
-    "nvidia/llama-3.3-nemotron-super-49b-v1": 35,
+    "meta/llama-3.2-11b-vision-instruct":     35,
+    "meta/llama-3.2-90b-vision-instruct":     20,  # lower — heavy model
     "microsoft/phi-4":                        35,
     "nvidia/nv-embedqa-e5-v5":                35,
     "nvidia/llama-nemotron-rerank-1b-v2":     35,
-    "meta/llama-3.2-90b-vision-instruct":     35,
-    "meta/llama-3.2-11b-vision-instruct":     35,
-    # Groq fallbacks
-    "groq/llama-3.3-70b-versatile":           4,
-    # Google fallbacks
-    "gemini-1.5-flash":                       14,
+    
+    # Groq — raised to 30 RPM (safe, already fixed in previous session)
+    "groq/llama-3.3-70b-versatile":           30,
+    
+    # Google — kept at 14 RPM (Gemini free tier is 15 RPM)
+    "gemini-1.5-flash-latest":                14,
 }
 
 # ── Primary → Fallback chain ──────────────────────────────────────────────────
 FALLBACK_CHAIN = {
-    "meta/llama-3.3-70b-instruct":            "groq/llama-3.3-70b-versatile",
+    # Cross-provider: NVIDIA → Groq (different provider = real fallback)
+    "nvidia/llama-3.3-nemotron-super-49b-v1": "groq/llama-3.3-70b-versatile",
+    
+    # Add buffer stop before Gemini: Groq → NVIDIA → Gemini
+    "groq/llama-3.3-70b-versatile":           "meta/llama-3.3-70b-instruct",
+    "meta/llama-3.3-70b-instruct":            "gemini-1.5-flash-latest",
+    
+    # Reasoning fallback (unchanged — already cross-model)
     "deepseek-ai/deepseek-r1":                "nvidia/llama-3.3-nemotron-super-49b-v1",
-    "qwen/qwen2.5-coder-32b-instruct":        "microsoft/phi-4",
-    "nvidia/llama-3.3-nemotron-super-49b-v1": "meta/llama-3.3-70b-instruct",
+    
+    # Coding fallback chain (new)
+    "qwen/qwen2.5-coder-32b-instruct":        "deepseek-ai/deepseek-r1",
+    
+    # Vision fallback (swapped — light to heavy)
+    "meta/llama-3.2-11b-vision-instruct":     "meta/llama-3.2-90b-vision-instruct",
     "meta/llama-3.2-90b-vision-instruct":     "meta/llama-3.2-11b-vision-instruct",
-    "groq/llama-3.3-70b-versatile":           "gemini-1.5-flash",
-    "gemini-1.5-flash":                       "microsoft/phi-4",
+    
+    # Bottom of chain safety nets (unchanged)
+    "gemini-1.5-flash-latest":                "microsoft/phi-4",
+    "microsoft/phi-4":                        None  # terminal — no further fallback
 }
 
 class RateLimiter:
