@@ -11,3 +11,11 @@ chroma_db/
 *.sqlite3
 .pytest_cache/
 /test_*.py
+CONVENTIONS.md
+master_upgrade_plan.md
+ELITE_ML_REPO_PROMPT.md
+agents_auth.md
+repo_structure.md
+/app.py
+/chatbot_agent.py
+test_image.jpg
