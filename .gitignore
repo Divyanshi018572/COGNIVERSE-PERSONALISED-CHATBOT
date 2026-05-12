@@ -10,3 +10,4 @@ chroma_db/
 *.db
 *.sqlite3
 .pytest_cache/
+/test_*.py
