@@ -113,5 +113,14 @@ docker-compose up -d --build
 *   **UI:** `http://localhost:8501`
 *   **Backend API Docs:** `http://localhost:8000/docs`
 
+## 🔮 Future Roadmap & Enhancements
+
+To further scale this architecture toward enterprise-grade maturity, the following enhancements are planned:
+
+*   **Model Distillation & Self-Hosting (vLLM):** Transition away from external proprietary APIs by fine-tuning small, specialized SLMs (e.g., Llama-3 8B) on evaluator datasets and hosting them locally via vLLM for zero-cost, low-latency inference.
+*   **GraphRAG Integration:** Upgrade the vector store (Chroma/FAISS) to a Knowledge Graph (Neo4j) to map entity relationships, drastically improving reasoning capabilities on complex, multi-hop document queries.
+*   **Dynamic Swarm Intelligence:** Evolve the static LangGraph routing tree into a dynamic "Agent Swarm," where sub-agents can autonomously spawn sub-agents to parallelize complex coding or research tasks.
+*   **Continuous RLHF Pipeline (Argilla):** Integrate user telemetry (thumbs-up/down feedback) directly into an Argilla dataset to continuously fine-tune the system's routing logic and generation quality via Reinforcement Learning from Human Feedback.
+
 ---
 *Built to demonstrate senior-level ML Engineering, robust LLMOps, and scalable Agentic AI system design.*
