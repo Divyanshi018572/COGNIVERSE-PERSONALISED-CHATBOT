@@ -12,10 +12,23 @@ from rag.document_processor import process_document
 from rag.vector_store import ingest_documents, query_documents
 
 from contextlib import asynccontextmanager
+from langchain.globals import set_llm_cache
+from langchain_community.cache import RedisSemanticCache
+from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+from utils.logger import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    try:
+        redis_url = os.getenv("REDIS_URI", "redis://localhost:6379/0")
+        set_llm_cache(RedisSemanticCache(
+            redis_url=redis_url,
+            embedding=NVIDIAEmbeddings(model="nvidia/nv-embedqa-e5-v5")
+        ))
+        logger.info("Semantic Caching Initialized via RedisStack")
+    except Exception as e:
+        logger.error(f"Failed to initialize Semantic Cache: {e}")
     yield
 
 app = FastAPI(title="Cognibot Multi-Agent API", lifespan=lifespan)
