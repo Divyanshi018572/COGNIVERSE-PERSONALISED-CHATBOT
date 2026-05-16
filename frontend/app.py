@@ -146,7 +146,19 @@ add_thread(st.session_state["thread_id"])
 
 st.sidebar.title("Cognibot 🧠")
 
-# Dashboard Stats
+# ── Page Navigation ───────────────────────────────────────────────────────────
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "Chat"
+
+page = st.sidebar.radio(
+    "Navigate",
+    ["💬 Chat", "🌐 Overview"],
+    index=0 if st.session_state["current_page"] == "Chat" else 1,
+    label_visibility="collapsed"
+)
+st.session_state["current_page"] = "Chat" if page == "💬 Chat" else "Overview"
+
+
 stats = get_feedback_stats()
 if stats["total"] > 0:
     st.sidebar.divider()
@@ -294,9 +306,176 @@ for tid in st.session_state["chat_threads"][::-1]:
         st.session_state["message_history"] = load_conversation(tid)
         st.rerun()
 
+# ── Overview Page ─────────────────────────────────────────────────────────────
+
+def render_overview():
+    st.markdown("""
+    <style>
+    .ov-hero { 
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        border-radius: 16px; padding: 48px 40px; text-align: center; margin-bottom: 32px;
+    }
+    .ov-hero h1 { font-size: 2.8rem; font-weight: 800; color: #fff; margin: 0 0 10px; }
+    .ov-hero p  { font-size: 1.1rem; color: #a0aec0; max-width: 680px; margin: 0 auto; }
+    .feat-card {
+        background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+        padding: 20px 22px; height: 100%; transition: border-color 0.2s;
+    }
+    .feat-card:hover { border-color: #58a6ff; }
+    .feat-icon { font-size: 2rem; margin-bottom: 8px; }
+    .feat-title { font-size: 1rem; font-weight: 700; color: #e6edf3; margin-bottom: 6px; }
+    .feat-desc  { font-size: 0.85rem; color: #8b949e; line-height: 1.5; }
+    .agent-badge {
+        display: inline-block; background: #21262d; border: 1px solid #30363d;
+        border-radius: 20px; padding: 4px 14px; font-size: 0.82rem; color: #58a6ff;
+        margin: 4px 3px;
+    }
+    .stack-pill {
+        display: inline-block; background: #0d1117; border: 1px solid #30363d;
+        border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; color: #7ee787;
+        margin: 3px 2px; font-family: monospace;
+    }
+    .revert-box {
+        background: #161b22; border: 1px solid #f0883e; border-radius: 12px;
+        padding: 20px 24px; margin-top: 24px;
+    }
+    .revert-box h4 { color: #f0883e; margin: 0 0 8px; }
+    .revert-box code { background: #0d1117; border-radius: 4px; padding: 2px 6px; color: #a5d6ff; font-size: 0.9rem; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Hero ──────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="ov-hero">
+        <h1>🧠 Cognibot — COGNIVERSE</h1>
+        <p>A production-grade, multi-agent AI assistant powered by LangGraph,
+           NVIDIA NIM, and Groq. Routes every query to the right specialist agent
+           in real-time with live streaming, semantic caching, and HITL oversight.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Core Feature Cards ────────────────────────────────────────────────────
+    st.subheader("⚡ Core Features")
+    c1, c2, c3 = st.columns(3)
+    cards = [
+        ("🤖", "Multi-Agent Orchestration",
+         "LangGraph routes queries to 9 specialist agents: Chat, Reasoning, Coding, Research, RAG, Vision, GitHub, Memory, and Evaluator."),
+        ("🌊", "Real-Time Token Streaming",
+         "Responses stream token-by-token via SSE. The Agentic Pulse sidebar shows live agent hops and execution steps."),
+        ("📚", "RAG Document Pipeline",
+         "Upload PDFs, CSVs, DOCX, or TXT files. ChromaDB + BM25 hybrid retrieval with NVIDIA re-ranking gives context-aware answers."),
+        ("👁️", "Vision Agent",
+         "Upload images (PNG, JPG, GIF, WEBP) and ask questions. Powered by meta/llama-3.2-11b-vision-instruct via NVIDIA NIM."),
+        ("🔍", "Live Web Research",
+         "The Research Agent uses Tavily Search + ArXiv to fetch real-time information and up-to-date academic papers."),
+        ("🐙", "GitHub Integration",
+         "Paste any public GitHub repo URL. The agent generates architecture diagrams, tech stack analysis, and contribution guides."),
+        ("⚖️", "AI Quality Auditor",
+         "Every response is evaluated by a High-Res Auditor agent that scores confidence and flags low-quality answers for improvement."),
+        ("💾", "Persistent Memory",
+         "Conversations are stored in PostgreSQL. The Memory Agent extracts long-term facts and the History API restores past sessions."),
+        ("🛡️", "Safety Guard",
+         "A dedicated Safety Agent screens every message before routing, blocking harmful or off-policy requests automatically."),
+    ]
+    all_cols = [c1, c2, c3]
+    for idx, (icon, title, desc) in enumerate(cards):
+        with all_cols[idx % 3]:
+            st.markdown(f"""
+            <div class="feat-card">
+                <div class="feat-icon">{icon}</div>
+                <div class="feat-title">{title}</div>
+                <div class="feat-desc">{desc}</div>
+            </div><br/>
+            """, unsafe_allow_html=True)
+
+    # ── Agent Roster ──────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🗂️ Agent Roster")
+    agents = [
+        ("🧭", "Router",          "Semantic router — classifies intent and dispatches to correct agent"),
+        ("💬", "Chat Agent",      "General Q&A, summaries, explanations"),
+        ("🧠", "Reasoning Agent", "Step-by-step logic, math, complex analysis"),
+        ("💻", "Coding Agent",    "Code gen, debugging, Python REPL execution"),
+        ("🔍", "Research Agent",  "Tavily + ArXiv live web & paper search"),
+        ("📚", "RAG Agent",       "Document Q&A over ingested files via ChromaDB"),
+        ("👁️", "Vision Agent",   "Image understanding & visual Q&A"),
+        ("🐙", "GitHub Agent",    "Repo analysis, architecture diagrams, contributor tips"),
+        ("💾", "Memory Agent",    "Long-term fact extraction & session persistence"),
+        ("⚖️", "Evaluator",      "Response quality audit with confidence scoring"),
+        ("🛡️", "Safety Agent",   "Pre-routing content policy enforcement"),
+    ]
+    for icon, name, role in agents:
+        col_a, col_b = st.columns([1, 5])
+        with col_a:
+            st.markdown(f"**{icon} {name}**")
+        with col_b:
+            st.caption(role)
+
+    # ── Tech Stack ────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🏗️ Tech Stack")
+    stack = {
+        "🤖 AI / Models": ["LangGraph", "LangChain", "NVIDIA NIM", "Groq", "Google Gemini", "Llama 3.3", "DeepSeek R1"],
+        "🖥️ Backend":     ["FastAPI", "Uvicorn", "SSE Streaming", "PostgreSQL", "Redis Stack", "ChromaDB"],
+        "🎨 Frontend":    ["Streamlit", "Mermaid.js", "Custom CSS", "Base64 Vision"],
+        "🔧 DevOps":      ["Docker", "docker-compose", "python-dotenv", "Tenacity", "structlog"],
+    }
+    for group, items in stack.items():
+        st.markdown(f"**{group}**")
+        pills_html = "".join(f'<span class="stack-pill">{i}</span>' for i in items)
+        st.markdown(f'<div style="margin-bottom:12px">{pills_html}</div>', unsafe_allow_html=True)
+
+    # ── How to Use ────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🚀 How to Use")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+**💬 Chat**
+1. Click **💬 Chat** in the sidebar
+2. Type your question and press Enter
+3. Watch the Agentic Pulse for live agent hops
+4. Give 👍/👎 feedback on any response
+
+**📎 Attach Files**
+1. Click **📎 Attach File** in sidebar
+2. Upload an image → asks Vision Agent
+3. Upload a PDF/CSV → auto-ingested into RAG
+4. Then ask questions about the document
+        """)
+    with col2:
+        st.markdown("""
+**🐙 GitHub Analysis**
+1. Expand **🐙 GitHub Integration** in sidebar
+2. Paste a public repo URL
+3. Get architecture diagrams + tech stack
+
+**🔍 Research Mode**
+- Ask anything starting with "research", "find papers", or "latest news"
+- The Research Agent fetches real-time results
+
+**🧠 Reasoning Mode**
+- Ask math, logic, or multi-step problems
+- Routes to Reasoning Agent automatically
+        """)
+
+    # ── Revert Instructions ───────────────────────────────────────────────────
+    st.divider()
+    st.markdown("""
+    <div class="revert-box">
+        <h4>⏪ How to Revert to This Exact State</h4>
+        <p>A git tag <code>v1.0-working-baseline</code> was created before any changes to this page.
+        To restore the app to that exact state, run:</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.code("git checkout v1.0-working-baseline", language="bash")
+    st.caption("To go back to the latest version after reverting: `git checkout main`")
+
+
 # ── Chat display ──────────────────────────────────────────────────────────────
 
 def render_feedback_buttons(question: str, answer: str, msg_id: str):
+
     col1, col2, col3 = st.columns([1, 1, 8])
     feedback_key = f"feedback_{msg_id}"
     
@@ -601,8 +780,14 @@ def run_stream(payload, status, message_placeholder):
             render_message_with_mermaid(full_response)
         return full_response, False, None, None, None
 
+# ── Page Router ───────────────────────────────────────────────────────────────
+if st.session_state.get("current_page") == "Overview":
+    render_overview()
+    st.stop()
+
 # ── Resume Interceptor ────────────────────────────────────────────────────────
 if "resume_action" in st.session_state:
+
     action = st.session_state.pop("resume_action")
     with st.chat_message("assistant"):
         status = st.status(f"⏳ {'Approving' if action == 'approve' else 'Rejecting'} action...", expanded=True)
