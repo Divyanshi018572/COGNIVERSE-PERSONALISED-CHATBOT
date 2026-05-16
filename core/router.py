@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 
 TASK_MODEL_MAP = {
     "chat":      "groq/llama-3.3-70b-versatile",
-    "reasoning": "groq/deepseek-r1-distill-llama-70b",
+    "reasoning": "nvidia/llama-3.3-nemotron-super-49b-v1",   # DeepSeek R1 removed from NVIDIA NIM
     "coding":    "qwen/qwen2.5-coder-32b-instruct",
     "rag":       "nvidia/llama-3.3-nemotron-super-49b-v1",
     "research":  "meta/llama-3.3-70b-instruct",
