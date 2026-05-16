@@ -8,13 +8,13 @@ logger = get_logger(__name__)
 
 TASK_MODEL_MAP = {
     "chat":      "groq/llama-3.3-70b-versatile",
-    "reasoning": "deepseek-ai/deepseek-r1",
+    "reasoning": "groq/deepseek-r1-distill-llama-70b",
     "coding":    "qwen/qwen2.5-coder-32b-instruct",
-    "rag":       "nvidia/llama-3.3-nemotron-super-49b-v1",
-    "research":  "meta/llama-3.3-70b-instruct",
+    "rag":       "groq/llama-3.3-70b-versatile",
+    "research":  "groq/llama-3.3-70b-versatile",
     "vision":    "meta/llama-3.2-11b-vision-instruct",
     "ocr":       "meta/llama-3.2-11b-vision-instruct",
-    "github":    "meta/llama-3.3-70b-instruct",
+    "github":    "groq/llama-3.3-70b-versatile",
 }
 
 VISION_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
