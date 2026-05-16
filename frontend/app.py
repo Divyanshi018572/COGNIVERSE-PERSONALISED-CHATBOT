@@ -566,6 +566,11 @@ def render_message_with_mermaid(content: str):
 
 
 
+# ── Page Router ───────────────────────────────────────────────────────────────
+if st.session_state.get("nav_page") == "🌐 Overview":
+    render_overview()
+    st.stop()
+
 for i, message in enumerate(st.session_state["message_history"]):
     with st.chat_message(message["role"]):
         if message["role"] == "assistant":
@@ -737,10 +742,6 @@ def run_stream(payload, status, message_placeholder):
             render_message_with_mermaid(full_response)
         return full_response, False, None, None, None
 
-# ── Page Router ───────────────────────────────────────────────────────────────
-if st.session_state.get("nav_page") == "🌐 Overview":
-    render_overview()
-    st.stop()
 
 # ── Resume Interceptor ────────────────────────────────────────────────────────
 if "resume_action" in st.session_state:
