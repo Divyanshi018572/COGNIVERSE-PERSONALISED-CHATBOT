@@ -22,3 +22,5 @@ def get_logger(name: str):
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
     return structlog.get_logger(name)
+
+logger = get_logger("Cognibot")

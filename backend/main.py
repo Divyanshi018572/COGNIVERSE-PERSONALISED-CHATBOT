@@ -12,7 +12,7 @@ from rag.document_processor import process_document
 from rag.vector_store import ingest_documents, query_documents
 
 from contextlib import asynccontextmanager
-from langchain.globals import set_llm_cache
+from langchain_core.globals import set_llm_cache
 from langchain_community.cache import RedisSemanticCache
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 from utils.logger import logger
