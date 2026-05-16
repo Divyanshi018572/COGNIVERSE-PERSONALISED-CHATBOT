@@ -21,14 +21,11 @@ from utils.logger import logger
 async def lifespan(app: FastAPI):
     init_db()
     try:
-        redis_url = os.getenv("REDIS_URI", "redis://localhost:6379/0")
-        set_llm_cache(RedisSemanticCache(
-            redis_url=redis_url,
-            embedding=NVIDIAEmbeddings(model="nvidia/nv-embedqa-e5-v5")
-        ))
-        logger.info("Semantic Caching Initialized via RedisStack")
+        from langchain_community.cache import InMemoryCache
+        set_llm_cache(InMemoryCache())
+        logger.info("In-Memory LLM Cache Initialized (RedisSemanticCache skipped - redis version incompatibility)")
     except Exception as e:
-        logger.error(f"Failed to initialize Semantic Cache: {e}")
+        logger.error(f"Failed to initialize LLM Cache: {e}")
     yield
 
 app = FastAPI(title="Cognibot Multi-Agent API", lifespan=lifespan)
