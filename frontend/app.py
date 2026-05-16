@@ -148,7 +148,7 @@ st.sidebar.title("Cognibot 🧠")
 
 # ── Page Navigation ───────────────────────────────────────────────────────────
 if "current_page" not in st.session_state:
-    st.session_state["current_page"] = "Chat"
+    st.session_state["current_page"] = "Overview"
 
 page = st.sidebar.radio(
     "Navigate",
@@ -425,51 +425,6 @@ def render_overview():
         pills_html = "".join(f'<span class="stack-pill">{i}</span>' for i in items)
         st.markdown(f'<div style="margin-bottom:12px">{pills_html}</div>', unsafe_allow_html=True)
 
-    # ── How to Use ────────────────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🚀 How to Use")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-**💬 Chat**
-1. Click **💬 Chat** in the sidebar
-2. Type your question and press Enter
-3. Watch the Agentic Pulse for live agent hops
-4. Give 👍/👎 feedback on any response
-
-**📎 Attach Files**
-1. Click **📎 Attach File** in sidebar
-2. Upload an image → asks Vision Agent
-3. Upload a PDF/CSV → auto-ingested into RAG
-4. Then ask questions about the document
-        """)
-    with col2:
-        st.markdown("""
-**🐙 GitHub Analysis**
-1. Expand **🐙 GitHub Integration** in sidebar
-2. Paste a public repo URL
-3. Get architecture diagrams + tech stack
-
-**🔍 Research Mode**
-- Ask anything starting with "research", "find papers", or "latest news"
-- The Research Agent fetches real-time results
-
-**🧠 Reasoning Mode**
-- Ask math, logic, or multi-step problems
-- Routes to Reasoning Agent automatically
-        """)
-
-    # ── Revert Instructions ───────────────────────────────────────────────────
-    st.divider()
-    st.markdown("""
-    <div class="revert-box">
-        <h4>⏪ How to Revert to This Exact State</h4>
-        <p>A git tag <code>v1.0-working-baseline</code> was created before any changes to this page.
-        To restore the app to that exact state, run:</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.code("git checkout v1.0-working-baseline", language="bash")
-    st.caption("To go back to the latest version after reverting: `git checkout main`")
 
 
 # ── Chat display ──────────────────────────────────────────────────────────────
