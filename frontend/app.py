@@ -147,16 +147,18 @@ add_thread(st.session_state["thread_id"])
 st.sidebar.title("Cognibot 🧠")
 
 # ── Page Navigation ───────────────────────────────────────────────────────────
-if "current_page" not in st.session_state:
-    st.session_state["current_page"] = "Overview"
+# Binding radio to session_state via key= is the correct Streamlit pattern.
+# Initialising to "🌐 Overview" ensures Overview is selected on every fresh load.
+if "nav_page" not in st.session_state:
+    st.session_state["nav_page"] = "🌐 Overview"
 
 page = st.sidebar.radio(
     "Navigate",
     ["💬 Chat", "🌐 Overview"],
-    index=0 if st.session_state["current_page"] == "Chat" else 1,
+    key="nav_page",
     label_visibility="collapsed"
 )
-st.session_state["current_page"] = "Chat" if page == "💬 Chat" else "Overview"
+
 
 
 stats = get_feedback_stats()
@@ -736,7 +738,7 @@ def run_stream(payload, status, message_placeholder):
         return full_response, False, None, None, None
 
 # ── Page Router ───────────────────────────────────────────────────────────────
-if st.session_state.get("current_page") == "Overview":
+if st.session_state.get("nav_page") == "🌐 Overview":
     render_overview()
     st.stop()
 
