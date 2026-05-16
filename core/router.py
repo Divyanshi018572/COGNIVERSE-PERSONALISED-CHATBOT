@@ -33,7 +33,9 @@ INTENT_SAMPLES = {
     "coding": [
         "write a python script", "fix this bug", "debug this error",
         "how do I implement a sorting algorithm", "refactor this code",
-        "write a SQL query", "create a React component", "help me with my code"
+        "write a SQL query", "create a React component", "help me with my code",
+        "give me an architecture diagram", "draw a class diagram", "show data structure",
+        "create a system design diagram", "explain with a diagram"
     ],
     "reasoning": [
         "analyze this argument", "explain why this happens step by step",
@@ -51,9 +53,9 @@ INTENT_SAMPLES = {
         "I'm feeling sad today", "hello there", "good morning"
     ],
     "github": [
-        "analyze the github repository", "find top repositories for topic",
-        "search github", "clone this repo", "how to contribute to this repo",
-        "github architecture"
+        "analyze the github repository at https", "find top repositories on github for topic",
+        "search github for repos", "clone this github repo", "how to contribute to this github repo",
+        "github.com repository analysis", "pull request review on github"
     ]
 }
 
