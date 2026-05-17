@@ -1,3 +1,4 @@
+import os
 import chromadb
 from langchain_community.vectorstores import Chroma
 from core.router import embedding_model
@@ -5,9 +6,9 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Persistent local Chroma client
-# Inside the docker container, this will save to /app/chroma_db
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
+# Path comes from env var — Docker volume mounts to /app/chroma_db
+_chroma_path = os.getenv("CHROMA_PATH", "/app/chroma_db")
+chroma_client = chromadb.PersistentClient(path=_chroma_path)
 
 def get_vector_store(thread_id: str):
     """

@@ -60,9 +60,10 @@ def get_score_color(score: float) -> str:
     if score >= 0.7: return "orange"
     return "red"
 
-def make_request(method, endpoint, **kwargs):
+def make_request(method, endpoint, timeout=120, **kwargs):
+    """Wrapper with 120s default timeout — NVIDIA NIM cold starts can take 90s+."""
     url = f"{BACKEND_URL}{endpoint}"
-    return requests.request(method, url, **kwargs)
+    return requests.request(method, url, timeout=timeout, **kwargs)
 
 def generate_thread_id() -> str:
     return str(uuid.uuid4())

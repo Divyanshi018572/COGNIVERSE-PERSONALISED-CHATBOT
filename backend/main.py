@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import json
 import os
@@ -13,8 +14,6 @@ from rag.vector_store import ingest_documents, query_documents
 
 from contextlib import asynccontextmanager
 from langchain_core.globals import set_llm_cache
-from langchain_community.cache import RedisSemanticCache
-from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 from utils.logger import logger
 
 @asynccontextmanager
@@ -30,13 +29,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cognibot Multi-Agent API", lifespan=lifespan)
 
+# ── CORS ─────────────────────────────────────────────────────────────────────
+_public_url = os.getenv("PUBLIC_URL", "*")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[_public_url] if _public_url != "*" else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- WebMCP Discovery ---
 @app.get("/mcp-actions.json")
 async def mcp_discovery():
     """Publishes machine-readable actions for AI browsing agents."""
+    public_url = os.getenv("PUBLIC_URL", "http://localhost:8501")
     return {
         "version": "1.0",
-        "site": "http://localhost:8501",
+        "site": public_url,
         "actions": [
             {
                 "id": "analyze-github-repo",

@@ -13,10 +13,6 @@ pool = ConnectionPool(
 def init_db():
     with pool.connection() as conn:
         with conn.cursor() as cursor:
-            # Drop old tables to avoid schema conflicts during development
-            cursor.execute("DROP TABLE IF EXISTS user_memory CASCADE")
-            cursor.execute("DROP TABLE IF EXISTS users CASCADE")
-            
             # Users table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
