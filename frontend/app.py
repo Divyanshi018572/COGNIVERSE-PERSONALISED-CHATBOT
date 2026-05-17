@@ -144,7 +144,179 @@ add_thread(st.session_state["thread_id"])
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
-st.sidebar.title("Cognibot 🧠")
+# ── Sidebar CSS Enhancement ───────────────────────────────────────────────────
+st.markdown("""
+<style>
+/* ── Sidebar base ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0d1117 0%, #0f1923 60%, #0d1117 100%);
+    border-right: 1px solid #21262d;
+}
+[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; }
+
+/* ── Brand header ── */
+.sb-brand {
+    background: linear-gradient(135deg, #1a1f2e, #161b27);
+    border-bottom: 1px solid #30363d;
+    padding: 20px 16px 16px;
+    margin: -1rem -1rem 0 -1rem;
+    text-align: center;
+}
+.sb-brand h1 {
+    font-size: 1.55rem !important;
+    font-weight: 800 !important;
+    background: linear-gradient(90deg, #58a6ff, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0 !important;
+    letter-spacing: -0.5px;
+}
+.sb-brand p {
+    font-size: 0.72rem;
+    color: #6e7681;
+    margin: 2px 0 0 !important;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+/* ── Nav radio pills ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] > div {
+    gap: 6px !important;
+    padding: 0 4px;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 10px !important;
+    padding: 8px 14px !important;
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    color: #8b949e !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    border-color: #58a6ff !important;
+    color: #e6edf3 !important;
+    background: #1f2937 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
+    background: linear-gradient(135deg, #1c2a3a, #1a2332) !important;
+    border-color: #58a6ff !important;
+    color: #58a6ff !important;
+}
+
+/* ── Section headers ── */
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 1.2px !important;
+    text-transform: uppercase !important;
+    color: #6e7681 !important;
+    margin: 4px 0 8px 0 !important;
+}
+
+/* ── Metric cards ── */
+[data-testid="stSidebar"] [data-testid="stMetric"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 10px !important;
+    padding: 10px !important;
+}
+[data-testid="stSidebar"] [data-testid="metric-container"] label {
+    font-size: 0.7rem !important;
+    color: #6e7681 !important;
+}
+
+/* ── Primary button (New Chat) ── */
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {
+    background: linear-gradient(135deg, #238636, #1a6b2a) !important;
+    border: 1px solid #2ea043 !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
+    letter-spacing: 0.3px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 0 12px rgba(46, 160, 67, 0.25) !important;
+}
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"]:hover {
+    box-shadow: 0 0 20px rgba(46, 160, 67, 0.4) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Secondary buttons (Attach, thread list) ── */
+[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 8px !important;
+    color: #c9d1d9 !important;
+    font-size: 0.85rem !important;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {
+    border-color: #58a6ff !important;
+    color: #58a6ff !important;
+    background: #1c2a3a !important;
+}
+
+/* ── Expander (GitHub Integration) ── */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 10px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    font-weight: 600 !important;
+    color: #c9d1d9 !important;
+    font-size: 0.88rem !important;
+}
+
+/* ── Dividers ── */
+[data-testid="stSidebar"] hr {
+    border-color: #21262d !important;
+    margin: 10px 0 !important;
+}
+
+/* ── Info box (agent trace) ── */
+[data-testid="stSidebar"] [data-testid="stAlert"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 8px !important;
+    font-size: 0.82rem !important;
+}
+
+/* ── Pulse animation for active agent ── */
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+.pulse-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: #58a6ff;
+    border-radius: 50%;
+    animation: pulse-dot 1.2s infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+/* ── Scrollbar ── */
+[data-testid="stSidebar"] ::-webkit-scrollbar { width: 4px; }
+[data-testid="stSidebar"] ::-webkit-scrollbar-track { background: transparent; }
+[data-testid="stSidebar"] ::-webkit-scrollbar-thumb {
+    background: #30363d; border-radius: 4px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Branded sidebar header ─────────────────────────────────────────────────────
+st.sidebar.markdown("""
+<div class="sb-brand">
+    <h1>⬡ COGNIVERSE</h1>
+    <p>Multi-Agent AI System</p>
+</div>
+""", unsafe_allow_html=True)
+
 
 # ── Page Navigation ───────────────────────────────────────────────────────────
 # Binding radio to session_state via key= is the correct Streamlit pattern.
@@ -177,18 +349,51 @@ st.sidebar.subheader("📡 Agentic Pulse")
 
 # Live Trace Monitor
 if st.session_state["agent_trace"]:
-    for step in st.session_state["agent_trace"][-5:]: # Show last 5 hops
-        status_icon = "🔵" if step["status"] == "active" else "✅"
-        st.sidebar.markdown(f"{status_icon} **{step['label']}**")
-        st.sidebar.caption(f"Time: {step['time']}")
+    for step in st.session_state["agent_trace"][-5:]:
+        is_active = step["status"] == "active"
+        dot = '<span class="pulse-dot"></span>' if is_active else "✅ "
+        st.sidebar.markdown(
+            f'<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;'
+            f'padding:8px 10px;margin-bottom:5px;font-size:0.82rem;">'
+            f'{dot}<b style="color:#e6edf3">{step["label"]}</b>'
+            f'<span style="color:#6e7681;font-size:0.72rem;float:right">{step["time"]}</span></div>',
+            unsafe_allow_html=True
+        )
 else:
-    st.sidebar.info("Waiting for agent activation...")
+    st.sidebar.markdown(
+        '<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;'
+        'padding:10px;font-size:0.82rem;color:#6e7681;text-align:center;">'
+        '<span class="pulse-dot"></span> Awaiting activation…</div>',
+        unsafe_allow_html=True
+    )
 
 st.sidebar.divider()
 st.sidebar.subheader("🚀 Performance HUD")
 pstats = st.session_state["performance_stats"]
-st.sidebar.markdown(f"**Latency:** `{pstats['latency']:.2f}s`")
-st.sidebar.markdown(f"**Throughput:** `{pstats['tps']:.1f}` tok/s")
+lat   = pstats['latency']
+tps   = pstats['tps']
+lat_pct = min(int((lat / 10) * 100), 100)
+tps_pct = min(int((tps / 50) * 100), 100)
+lat_color = "#f472b6" if lat > 5 else "#58a6ff" if lat > 2 else "#7ee787"
+tps_color = "#7ee787" if tps > 20 else "#f0883e" if tps > 5 else "#6e7681"
+st.sidebar.markdown(f"""
+<div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px 14px;font-size:0.82rem;">
+  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+    <span style="color:#8b949e">⚡ Latency</span>
+    <b style="color:{lat_color}">{lat:.2f}s</b>
+  </div>
+  <div style="background:#0d1117;border-radius:4px;height:4px;margin-bottom:10px;">
+    <div style="width:{lat_pct}%;height:4px;background:{lat_color};border-radius:4px;transition:width 0.5s;"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+    <span style="color:#8b949e">🔄 Throughput</span>
+    <b style="color:{tps_color}">{tps:.1f} tok/s</b>
+  </div>
+  <div style="background:#0d1117;border-radius:4px;height:4px;">
+    <div style="width:{tps_pct}%;height:4px;background:{tps_color};border-radius:4px;transition:width 0.5s;"></div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.divider()
 
