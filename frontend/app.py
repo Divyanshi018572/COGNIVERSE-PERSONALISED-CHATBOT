@@ -677,8 +677,25 @@ def render_feedback_buttons(question: str, answer: str, msg_id: str):
             st.caption("✅ Feedback recorded")
 
 
+def sanitize_response(content: str) -> str:
+    """Cleans common LLM output artifacts before rendering."""
+    if not content:
+        return content
+    # Replace literal \n escape sequences with real newlines
+    content = content.replace("\\n", "\n")
+    # Replace literal \t with spaces
+    content = content.replace("\\t", "    ")
+    # Strip raw Python dict patterns like {'title': ..., 'url': ..., 'content': ...}
+    import re as _re
+    content = _re.sub(r"\{['\"]title['\"]:\s*['\"][^'\"]*['\"],\s*['\"]url['\"]:[^}]+\}", "", content)
+    content = _re.sub(r"\{['\"]score['\"]:\s*[\d.]+\}", "", content)
+    # Collapse more than 3 consecutive blank lines into 2
+    content = _re.sub(r"\n{4,}", "\n\n\n", content)
+    return content.strip()
+
 def render_message_with_mermaid(content: str):
     """Parses markdown content and safely renders Mermaid blocks via HTML components."""
+    content = sanitize_response(content)
     parts = re.split(r'```mermaid\n(.*?)\n```', content, flags=re.DOTALL)
     for i, part in enumerate(parts):
         if i % 2 == 0:
